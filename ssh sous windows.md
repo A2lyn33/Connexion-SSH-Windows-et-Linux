@@ -1,140 +1,63 @@
-# 🛠️ Tutoriel : Installer et configurer SSH sur un serveur et un client Windows
+# SSH sous Windows — laboratoire
 
-SSH (Secure Shell) est un protocole essentiel pour administrer des serveurs à distance de manière sécurisée. Ce guide vous expliquera comment installer et configurer SSH sur un serveur Windows ainsi que sur un client Windows, adapté aux débutants.
+## Préparer le serveur
 
----
+Sur la machine qui recevra les connexions, vérifier la présence d'OpenSSH Server dans les fonctionnalités Windows. L'installation et la gestion du service nécessitent une console PowerShell administrateur.
 
-## ⚙️ Pré-requis
-- Un ordinateur Windows 10 ou supérieur.
-- Une connexion Internet active.
-- Accès administrateur sur le système.
+```powershell
+Get-Service sshd
+Set-Service -Name sshd -StartupType Automatic
+Start-Service sshd
+```
 
----
+Vérifier la règle de pare-feu OpenSSH existante et limiter son accès aux machines d'administration prévues. Depuis le client :
 
-## 🚀 Étape 1 : Activer et configurer le serveur SSH sur Windows
+```powershell
+Test-NetConnection -ComputerName ADRESSE_SERVEUR -Port 22
+ssh utilisateur@ADRESSE_SERVEUR
+```
 
-### 1️⃣ Vérifier la disponibilité de l'OpenSSH Server
+Les valeurs en majuscules sont à remplacer. Avant d'accepter une clé d'hôte, comparer son empreinte avec celle relevée sur le serveur par un canal de confiance.
 
-1. Ouvrez les **Paramètres Windows** (Win + I).
-2. Naviguez vers **Applications > Fonctionnalités facultatives**.
-3. Recherchez "OpenSSH Server" dans la liste des fonctionnalités installées.
-   - **Si présent** : Passez à l'étape suivante.
-   - **Si absent** : Cliquez sur **Ajouter une fonctionnalité**, recherchez "OpenSSH Server" et installez-le.
+## Authentification par clé
 
-### 2️⃣ Activer et démarrer le service OpenSSH Server
+Créer une paire de clés sur le client avec `ssh-keygen`, en protégeant la clé privée par une phrase de passe. Choisir un nouveau nom si le fichier proposé existe déjà.
 
-1. Lancez **PowerShell** en tant qu'administrateur.
-2. Exécutez les commandes suivantes pour activer et démarrer le service :
-   ```powershell
-   Set-Service -Name sshd -StartupType Automatic
-   Start-Service sshd
-   ```
-3. Vérifiez que le service est actif :
-   ```powershell
-   Get-Service -Name sshd
-   ```
-   - Le statut doit être "Running".
+Copier uniquement la **clé publique** sur le serveur. L'emplacement dépend du compte et de la configuration effective de `sshd_config` :
 
-### 3️⃣ Configurer le pare-feu pour SSH
+| Compte Windows distant | Emplacement habituel |
+| --- | --- |
+| Utilisateur standard | `C:\Users\NomUtilisateur\.ssh\authorized_keys` |
+| Membre du groupe Administrateurs, avec la configuration OpenSSH par défaut | `C:\ProgramData\ssh\administrators_authorized_keys` |
 
-1. Ajoutez une règle au pare-feu pour permettre les connexions SSH :
-   ```powershell
-   New-NetFirewallRule -Name "OpenSSH-Server" -DisplayName "OpenSSH Server" -Protocol TCP -LocalPort 22 -Action Allow -Direction Inbound
-   ```
-2. Assurez-vous que le port 22 est ouvert.
+Les permissions du fichier doivent être conformes aux exigences OpenSSH ; voir la documentation Microsoft ci-dessous. Une copie dans le profil de l'utilisateur administrateur ne suffit pas avec la configuration par défaut.
 
-### 4️⃣ Tester la connexion SSH au serveur
+Tester depuis le client :
 
-1. Depuis une autre machine, utilisez un client SSH (par exemple, PuTTY ou `ssh` en ligne de commande).
-2. Connectez-vous au serveur Windows en tapant :
-   ```bash
-   ssh NomUtilisateur@AdresseIP
-   ```
-3. Entrez le mot de passe de l'utilisateur.
+```powershell
+ssh -o PreferredAuthentications=publickey -o PasswordAuthentication=no utilisateur@ADRESSE_SERVEUR
+```
 
----
+## Modifier la configuration
 
-## 🚀 Étape 2 : Configurer le client SSH sur Windows
+Le fichier est généralement `C:\ProgramData\ssh\sshd_config`. Avant de désactiver les mots de passe, réussir une connexion par clé dans une deuxième session et conserver un accès local de secours.
 
-### 1️⃣ Vérifier la disponibilité du client OpenSSH
+Après modification, vérifier la syntaxe avec le binaire `sshd.exe -t` de l'installation OpenSSH, puis redémarrer le service :
 
-1. Ouvrez **PowerShell** ou l'invite de commandes.
-2. Tapez :
-   ```bash
-   ssh
-   ```
-   - Si une aide ou un guide d'utilisation apparaît, le client SSH est installé.
-   - Sinon, installez-le via **Paramètres > Applications > Fonctionnalités facultatives** ("OpenSSH Client").
+```powershell
+Restart-Service sshd
+```
 
-### 2️⃣ Tester une connexion SSH depuis le client
+Tester une nouvelle connexion. Ne pas copier automatiquement les directives propres à un serveur Linux dans la configuration Windows.
 
-1. Ouvrez PowerShell ou l'invite de commandes.
-2. Connectez-vous à un serveur distant avec :
-   ```bash
-   ssh NomUtilisateur@AdresseIP
-   ```
-3. Si la clé de l'hôte est demandée, tapez "yes".
-4. Entrez le mot de passe pour établir la connexion.
+## Dépanner
 
----
+- **Port inaccessible :** vérifier l'adresse, le service et la portée du pare-feu.
+- **Clé refusée :** vérifier le compte distant, le chemin des clés autorisées et leurs permissions.
+- **Empreinte différente :** confirmer l'identité du serveur avant de modifier `known_hosts`.
 
-## 🔐 Étape 3 : Configuration avancée (optionnel)
+**Statut :** fiche relue en novembre 2026 ; connexion réelle à valider dans un laboratoire Windows.
 
-### 1️⃣ Configurer l'authentification par clé SSH
+Références : [Microsoft — gestion des clés](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh_keymanagement) · [Configuration du serveur](https://learn.microsoft.com/en-us/windows-server/administration/openssh/openssh-server-configuration).
 
-1. **Générer une clé SSH sur le client**
-   - Dans PowerShell, tapez :
-     ```bash
-     ssh-keygen
-     ```
-   - Suivez les instructions et sauvegardez la clé dans le répertoire par défaut.
-
-2. **Copier la clé publique sur le serveur**
-   - Exécutez :
-     ```bash
-     ssh-copy-id NomUtilisateur@AdresseIP
-     ```
-   - Si `ssh-copy-id` n'est pas disponible, copiez manuellement le contenu de `id_rsa.pub` (clé publique) dans le fichier `authorized_keys` du serveur :
-     - Copiez le contenu de `C:\Users\VotreNom\.ssh\id_rsa.pub`.
-     - Collez-le dans `C:\Users\NomServeur\.ssh\authorized_keys` sur le serveur.
-
-3. **Tester l'authentification par clé**
-   - Connectez-vous au serveur sans mot de passe :
-     ```bash
-     ssh NomUtilisateur@AdresseIP
-     ```
-
-### 2️⃣ Modifier le fichier de configuration SSH (sshd_config)
-
-1. Ouvrez le fichier `sshd_config` situé dans `C:\ProgramData\ssh\`.
-2. Modifiez ou ajoutez les lignes suivantes pour renforcer la sécurité :
-   ```bash
-   PasswordAuthentication no
-   PubkeyAuthentication yes
-   PermitRootLogin no
-   ```
-3. Redémarrez le service SSH :
-   ```powershell
-   Restart-Service sshd
-   ```
-
----
-
-## 📋 Résolution des problèmes courants
-
-1. **Erreur : "Connection refused"**
-   - Assurez-vous que le service SSH est en cours d'exécution.
-   - Vérifiez que le port 22 est ouvert dans le pare-feu.
-
-2. **Erreur : "Permission denied"**
-   - Vérifiez les permissions du fichier `authorized_keys`.
-   - Assurez-vous que l'utilisateur a les droits nécessaires.
-
-3. **Client SSH introuvable**
-   - Réinstallez le client OpenSSH via les fonctionnalités facultatives de Windows.
-
----
-
-## ✅ Conclusion
-
-Vous avez maintenant configuré SSH sur un serveur et un client Windows. Cela permet des connexions sécurisées pour la gestion et le transfert de fichiers. Si vous débutez, commencez par tester des connexions simples avant de passer à des configurations avancées comme les clés SSH.
+[Retour au sommaire](README.md)
